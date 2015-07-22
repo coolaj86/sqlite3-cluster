@@ -1,12 +1,12 @@
 'use strict';
 
-var path = require('path');
 var numcpus = require('os').cpus().length;
+var sqlite3;
 
-if (numcpus >= 2) {
-  sqlite3 = require('./sqlite-client');
+if (false && numcpus >= 2) {
+  sqlite3 = require('./client');
 } else {
-  sqlite3 = require('./sqlite3-wrapper');
+  sqlite3 = require('./wrapper');
 }
 
 module.exports = sqlite3;
