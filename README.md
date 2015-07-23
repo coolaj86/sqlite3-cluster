@@ -23,7 +23,7 @@ var sqlite = require('sqlite3-server');
 var opts = {
   key: '1892d335081d8d346e556c9c3c8ff2c3'
 , bits: 128
-, storage: path.join('/tmp/authn.sqlcipher')
+, filename: path.join('/tmp/authn.sqlcipher')
 , verbose: false
 , port: 3232 // default random
 , forceServer: true // default false

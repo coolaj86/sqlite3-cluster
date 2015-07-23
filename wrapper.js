@@ -19,11 +19,12 @@ function create(opts) {
     sqlite3.verbose();
   }
 
-  if (!dbs[opts.storage] || dbs[opts.storage].__key !== opts.key) {
-    dbs[opts.storage] = new sqlite3.Database(opts.storage);
+  if (!dbs[opts.filename] || dbs[opts.filename].__key !== opts.key) {
+    dbs[opts.filename] = new sqlite3.Database(opts.filename);
   }
 
-  db = dbs[opts.storage];
+  db = dbs[opts.filename];
+  db.sanitize = sanitize;
   db.__key = opts.key;
 
   return new Promise(function (resolve, reject) {
