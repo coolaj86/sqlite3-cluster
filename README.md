@@ -87,6 +87,10 @@ You must do this:
 require('sqlite3-cluster').create(filename);
 ```
 
+Also, `verbose` becomes an option to pass into the create function,
+rather than a function to call. Even though `verbose` is passed on
+create, it still behaves globally across all databases.
+
 2 db.escape
 -----------
 
