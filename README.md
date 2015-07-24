@@ -41,8 +41,8 @@ var opts = {
 , connect: cluster.isWorker
 , standalone: (1 === numCores) // overrides serve and connect
 
-  // if using SQLCipher, you can supply the key and desired bit-length
-  // and the appropriate PRAGMA statements will be issued before the database is returned
+  // if using SQLCipher, you can supply the key and desired bit-length and the
+  // appropriate PRAGMA statements will be issued before the database is returned
 , key: '00000000000000000000000000000000'
 , bits: 128
 };
