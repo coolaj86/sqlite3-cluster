@@ -8,7 +8,7 @@ var i;
 function run() {
   var sqlite3 = require('./cluster');
 
-  sqlite3.create({
+  return sqlite3.create({
       key: '00000000000000000000000000000000'
     , bits: 128
     , filename: '/tmp/test.cluster.sqlcipher'
