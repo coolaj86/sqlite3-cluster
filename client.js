@@ -168,6 +168,7 @@ function create(opts) {
     }
 
     db.sanitize = require('./wrapper').sanitize;
+    db.escape = require('./wrapper').escape;
 
     Object.keys(sqlite3real.Database.prototype).forEach(function (key) {
 
@@ -201,4 +202,5 @@ function create(opts) {
 
 
 module.exports.sanitize = require('./wrapper').sanitize;
+module.exports.escape = require('./wrapper').escape;
 module.exports.create = create;

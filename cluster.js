@@ -18,4 +18,5 @@ function create(opts) {
 }
 
 module.exports.sanitize = sqlite3.sanitize;
+module.exports.escape = sqlite3.escape;
 module.exports.create = create;

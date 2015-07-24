@@ -25,6 +25,7 @@ function create(opts) {
 
   db = dbs[opts.filename];
   db.sanitize = sanitize;
+  db.escape = sanitize;
   db.__key = opts.key;
 
   return new Promise(function (resolve, reject) {
@@ -58,5 +59,6 @@ function create(opts) {
 }
 
 module.exports.sanitize = sanitize;
+module.exports.escape = sanitize;
 module.exports.Database = sqlite3.Database;
 module.exports.create = create;
