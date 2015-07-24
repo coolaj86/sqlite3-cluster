@@ -25,17 +25,17 @@ function startServer(opts) {
 }
 
 function getConnection(opts) {
-  if (!opts.sock) {
-    opts.sock = opts.filename + '.sock';
-  }
-
   return new Promise(function (resolve) {
     setTimeout(function () {
       var WebSocket = require('ws');
       var ws = new WebSocket('ws+unix:' + opts.sock);
 
-      if (opts.server) {
-        return startServer(opts);
+      if (opts.serve) {
+        console.log("[EXPLICIT SERVER] #################################################");
+        return startServer(opts).then(function (client) {
+          // ws.masterClient = client;
+          resolve({ masterClient: client });
+        });
       }
 
       ws.on('error', function (err) {
@@ -48,7 +48,8 @@ function getConnection(opts) {
           }, 100 + (Math.random() * 250));
         }
 
-        if ('ENOENT' === err.code || 'ECONNREFUSED' === err.code) {
+        if (!opts.connect && ('ENOENT' === err.code || 'ECONNREFUSED' === err.code)) {
+          console.log('[NO SERVER] attempting to create a server #######################');
           return startServer(opts).then(function (client) {
             // ws.masterClient = client;
             resolve({ masterClient: client });
@@ -68,8 +69,38 @@ function getConnection(opts) {
 }
 
 function create(opts) {
+  if (!opts.sock) {
+    opts.sock = opts.filename + '.sock';
+  }
+
+  var promise;
+  var numcpus = require('os').cpus().length;
+  if (opts.standalone || (1 === numcpus && !opts.serve && !opts.connect)) {
+    return require('./wrapper').create(opts);
+  }
+
+  function retryServe() {
+    return startServer(opts).then(function (client) {
+      // ws.masterClient = client;
+      return { masterClient: client };
+    }, function () {
+      retryServe();
+    });
+  }
+
+  if (opts.serve) {
+    console.log('[EXPLICIT]');
+    promise = retryServe();
+  } else {
+    promise = getConnection(opts);
+  }
+  /*
+  if (opts.connect) {
+  }
+  */
+
   // TODO maybe use HTTP POST instead?
-  return getConnection(opts).then(function (ws) {
+  return promise.then(function (ws) {
     if (ws.masterClient) {
       console.log('[MASTER CLIENT] found');
       return ws.masterClient;
