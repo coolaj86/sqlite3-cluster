@@ -50,7 +50,7 @@ var opts = {
 sqlite.create(opts).then(function (db) {
   // same api as new sqlite3.Database(options.filename)
 
-  client.run("SELECT 1", [], function (err) {
+  client.run("SELECT ?", ['Hello World!'], function (err) {
     if (err) {
       console.error('[ERROR]', cluster.isMaster && '0' || cluster.worker.id);
       console.error(err);
@@ -60,6 +60,14 @@ sqlite.create(opts).then(function (db) {
     console.log('[this]', cluster.isMaster && '0' || cluster.worker.id);
     console.log(this);
   });
+});
+
+process.on('unhandledPromiseRejection', function (err) {
+  console.error('Unhandled Promise Rejection');
+  console.error(err);
+  console.error(err.stack);
+
+  throw err;
 });
 ```
 
