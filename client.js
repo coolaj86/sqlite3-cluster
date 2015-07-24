@@ -71,11 +71,13 @@ function create(opts) {
   // TODO maybe use HTTP POST instead?
   return getConnection(opts).then(function (ws) {
     if (ws.masterClient) {
+      console.log('[MASTER CLIENT] found');
       return ws.masterClient;
     }
 
     var db = {};
     var proto = sqlite3real.Database.prototype;
+    var messages = [];
 
     function rpc(fname, args) {
       var id;
@@ -86,31 +88,52 @@ function create(opts) {
         cb = args.pop();
       }
 
-      ws.send({
+      console.log('fname, args');
+      console.log(fname, args);
+
+      ws.send(JSON.stringify({
         type: 'rpc'
       , func: fname
       , args: args
       , filename: opts.filename
       , id: id
-      });
+      }));
 
       if (!cb) {
         return;
       }
 
       function onMessage(data) {
-        if (!data || 'object' !== typeof data) {
+        var cmd;
+
+        try {
+          cmd = JSON.parse(data.toString('utf8'));
+        } catch(e) {
+          console.error('[ERROR] in client, from sql server parse json');
+          console.error(e);
+          console.error(data);
+          console.error();
+
+          //ws.send(JSON.stringify({ type: 'error', value: { message: e.message, code: "E_PARSE_JSON" } }));
           return;
         }
 
-        if (data.id !== id) {
+        if (cmd.id !== id) {
           return;
         }
 
-        cb.apply(data.this, data.args);
+        //console.log('onMessage data');
+        //console.log(cmd);
+
+        cb.apply(cmd.this, cmd.args);
+
+        if ('on' !== fname) {
+          var index = messages.indexOf(onMessage);
+          messages.splice(index, 1);
+        }
       }
 
-      ws.on('message', onMessage);
+      messages.push(onMessage);
     }
 
     db.sanitize = require('./wrapper').sanitize;
@@ -125,6 +148,15 @@ function create(opts) {
 
     });
 
+    ws.on('message', function (data) {
+      messages.forEach(function (fn) {
+        try {
+          fn(data);
+        } catch(e) {
+          // ignore
+        }
+      });
+    });
 
     // serialize
     // parallel

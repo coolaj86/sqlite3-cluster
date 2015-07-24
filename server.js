@@ -24,12 +24,18 @@ function createApp(server, options) {
       ws.__session_id = location.query.session_id || Math.random();
 
       ws.on('message', function (buffer) {
+        console.log('[SERVER MESSAGE]', buffer);
         var cmd;
 
         try {
           cmd = JSON.parse(buffer.toString('utf8'));
         } catch(e) {
+          console.error('[ERROR] parse json');
+          console.error(e);
+          console.error(buffer);
+          console.error();
           ws.send(JSON.stringify({ type: 'error', value: { message: e.message, code: "E_PARSE_JSON" } }));
+          return;
         }
 
         switch(cmd.type) {
@@ -37,6 +43,17 @@ function createApp(server, options) {
             break;
 
           case 'rpc':
+            cmd.args.push(function () {
+              var args = Array.prototype.slice.call(arguments);
+
+              ws.send(JSON.stringify({
+                this: this
+              , args: args
+              , id: cmd.id
+              }));
+            });
+
+            db[cmd.func].apply(db, cmd.args);
             break;
 
           default:
