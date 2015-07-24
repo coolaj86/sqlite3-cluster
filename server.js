@@ -4,19 +4,24 @@
 var wsses = {};
 
 function createApp(server, options) {
-  console.log('Create App');
 
   if (wsses[options.filename]) {
     return Promise.resolve(wsses[options.filename]);
   }
 
   return require('./wrapper').create(options).then(function (db) {
+
     var url = require('url');
-    var express = require('express');
-    var app = express();
+    //var express = require('express');
+    //var app = express();
     var wss = server.wss;
 
+    function app(req, res) {
+      res.end('NOT IMPLEMENTED');
+    }
+
     wss.on('connection', function (ws) {
+
       var location = url.parse(ws.upgradeReq.url, true);
       // you might use location.query.access_token to authenticate or share sessions
       // or ws.upgradeReq.headers.cookie (see http://stackoverflow.com/a/16395220/151312
@@ -24,7 +29,6 @@ function createApp(server, options) {
       ws.__session_id = location.query.session_id || Math.random();
 
       ws.on('message', function (buffer) {
-        console.log('[SERVER MESSAGE]', buffer);
         var cmd;
 
         try {
@@ -57,7 +61,8 @@ function createApp(server, options) {
             break;
 
           default:
-            break;
+            throw new Error('UNKNOWN TYPE');
+            //break;
         }
 
       });
@@ -73,29 +78,29 @@ function createApp(server, options) {
 }
 
 function create(options) {
-  console.log('Create Server');
+  var server = require('http').createServer();
+  var WebSocketServer = require('ws').Server;
+  var wss = new WebSocketServer({ server: server });
+  //var port = process.env.PORT || process.argv[0] || 4080;
 
-  return new Promise(function (resolve) {
-    var server = require('http').createServer();
-    var WebSocketServer = require('ws').Server;
-    var wss = new WebSocketServer({ server: server });
-    //var port = process.env.PORT || process.argv[0] || 4080;
+  var fs = require('fs');
+  var ps = [];
 
-    console.log('options.sock');
-    console.log(options.sock);
-    var fs = require('fs');
+  ps.push(new Promise(function (resolve) {
     fs.unlink(options.sock, function () {
       // ignore error when socket doesn't exist
 
-      server.listen(options.sock, function () {
-        console.log('Listening');
-      });
+      server.listen(options.sock, resolve);
     });
+  }));
 
-    createApp({ server: server, wss: wss }, options).then(function (app) {
-      server.on('request', app);
-      resolve({ masterClient: app.masterClient });
-    });
+  ps.push(createApp({ server: server, wss: wss }, options).then(function (app) {
+    server.on('request', app);
+    return { masterClient: app.masterClient };
+  }));
+
+  return Promise.all(ps).then(function (results) {
+    return results[1];
   });
 }
 

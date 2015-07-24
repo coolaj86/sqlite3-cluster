@@ -1,6 +1,7 @@
 'use strict';
 
 var cluster = require('cluster');
+//var numCores = 2;
 var numCores = require('os').cpus().length;
 var i;
 
@@ -16,7 +17,7 @@ function run() {
     , serve: null
     , connect: null
   }).then(function (client) {
-    client.run("SELECT 1", [], function (err) {
+    client.get("SELECT ?", ['Hello World!'], function (err, result) {
       if (err) {
         console.error('[ERROR]', cluster.isMaster && '0' || cluster.worker.id);
         console.error(err);
@@ -25,14 +26,29 @@ function run() {
 
       console.log('[this]', cluster.isMaster && '0' || cluster.worker.id);
       console.log(this);
+
+      console.log('[result]', cluster.isMaster && '0' || cluster.worker.id);
+      console.log(result);
     });
   });
 }
 
 if (cluster.isMaster) {
-  for (i = 1; i <= numCores; i += 1) {
-    cluster.fork();
-  }
+  // not a bad idea to setup the master before forking the workers
+  run().then(function () {
+    for (i = 1; i <= numCores; i += 1) {
+      cluster.fork();
+    }
+  });
+} else {
+  run();
 }
 
-run();
+// The native Promise implementation ignores errors because... dumbness???
+process.on('unhandledPromiseRejection', function (err) {
+  console.error('Unhandled Promise Rejection');
+  console.error(err);
+  console.error(err.stack);
+
+  process.exit(1);
+});

@@ -1,3 +1,5 @@
+#!/bin/bash
+
 #brew options sqlcipher
 #brew install sqlcipher --with-fts
 echo STOP

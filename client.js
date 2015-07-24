@@ -26,17 +26,9 @@ function startServer(opts) {
 
 function getConnection(opts) {
   return new Promise(function (resolve) {
-    setTimeout(function () {
+    //setTimeout(function () {
       var WebSocket = require('ws');
       var ws = new WebSocket('ws+unix:' + opts.sock);
-
-      if (opts.serve) {
-        console.log("[EXPLICIT SERVER] #################################################");
-        return startServer(opts).then(function (client) {
-          // ws.masterClient = client;
-          resolve({ masterClient: client });
-        });
-      }
 
       ws.on('error', function (err) {
         console.error('[ERROR] ws connection failed, retrying');
@@ -44,7 +36,7 @@ function getConnection(opts) {
 
         function retry() {
           setTimeout(function () {
-            getConnection(opts).then(resolve);
+            getConnection(opts).then(resolve, retry);
           }, 100 + (Math.random() * 250));
         }
 
@@ -64,8 +56,8 @@ function getConnection(opts) {
       ws.on('open', function () {
         resolve(ws);
       });
-    });
-  }, 100 + (Math.random() * 250));
+    //}, 100 + (Math.random() * 250));
+  });
 }
 
 function create(opts) {
@@ -83,13 +75,14 @@ function create(opts) {
     return startServer(opts).then(function (client) {
       // ws.masterClient = client;
       return { masterClient: client };
-    }, function () {
+    }, function (err) {
+      console.error('[ERROR] retryServe()');
+      console.error(err);
       retryServe();
     });
   }
 
   if (opts.serve) {
-    console.log('[EXPLICIT]');
     promise = retryServe();
   } else {
     promise = getConnection(opts);
@@ -102,7 +95,6 @@ function create(opts) {
   // TODO maybe use HTTP POST instead?
   return promise.then(function (ws) {
     if (ws.masterClient) {
-      console.log('[MASTER CLIENT] found');
       return ws.masterClient;
     }
 
@@ -118,9 +110,6 @@ function create(opts) {
         id = Math.random();
         cb = args.pop();
       }
-
-      console.log('fname, args');
-      console.log(fname, args);
 
       ws.send(JSON.stringify({
         type: 'rpc'
@@ -153,9 +142,6 @@ function create(opts) {
           return;
         }
 
-        //console.log('onMessage data');
-        //console.log(cmd);
-
         cb.apply(cmd.this, cmd.args);
 
         if ('on' !== fname) {
@@ -185,6 +171,8 @@ function create(opts) {
         try {
           fn(data);
         } catch(e) {
+          console.error("[ERROR] ws.on('message', fn) (multi-callback)");
+          console.error(e);
           // ignore
         }
       });

@@ -12,7 +12,7 @@ function run() {
     , serve: null
     , connect: null
   }).then(function (client) {
-    client.run("SELECT 1", [], function (err) {
+    client.all("SELECT ?", ['Hello World!'], function (err, result) {
       if (err) {
         console.error('[ERROR] standalone');
         console.error(err);
@@ -21,8 +21,20 @@ function run() {
 
       console.log('[this] standalone');
       console.log(this);
+
+      console.log('[result] standalone');
+      console.log(result);
     });
   });
 }
 
 run();
+
+// The native Promise implementation ignores errors because... dumbness???
+process.on('unhandledPromiseRejection', function (err) {
+  console.error('Unhandled Promise Rejection');
+  console.error(err);
+  console.error(err.stack);
+
+  process.exit(1);
+});
