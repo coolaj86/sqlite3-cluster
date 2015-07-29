@@ -5,19 +5,16 @@ var cluster = require('cluster');
 var numCores = require('os').cpus().length;
 var i;
 
-function run() {
-  var sqlite3 = require('./cluster');
+function testSelect(client) {
+  return client.run('CREATE TABLE IF NOT EXISTS meta (version TEXT)', function (err) {
+    if (err) {
+      console.error('[ERROR] create table', cluster.isMaster && '0' || cluster.worker.id);
+      console.error(err);
+      return;
+    }
 
-  return sqlite3.create({
-      key: '00000000000000000000000000000000'
-    , bits: 128
-    , filename: '/tmp/test.cluster.sqlcipher'
-    , verbose: null
-    , standalone: null
-    , serve: null
-    , connect: null
-  }).then(function (client) {
-    client.get("SELECT ?", ['Hello World!'], function (err, result) {
+    return client.get("SELECT version FROM meta", [], function (err, result) {
+
       if (err) {
         console.error('[ERROR]', cluster.isMaster && '0' || cluster.worker.id);
         console.error(err);
@@ -33,6 +30,43 @@ function run() {
   });
 }
 
+function init() {
+  var sqlite3 = require('./cluster');
+
+  return sqlite3.create({
+      bits: 128
+    , filename: '/tmp/test.cluster.sqlcipher'
+    , verbose: null
+    , standalone: null
+    , serve: null
+    , connect: null
+  }).then(function (client) {
+    console.log('[INIT] begin');
+    return client.init({ bits: 128, key: '00000000000000000000000000000000' });
+  }).then(testSelect, function (err) {
+    console.error('[ERROR]');
+    console.error(err);
+  }).then(function () {
+    console.log('success');
+  }, function (err) {
+    console.error('[ERROR 2]');
+    console.error(err);
+  });
+}
+
+function run() {
+  var sqlite3 = require('./cluster');
+
+  return sqlite3.create({
+      bits: 128
+    , filename: '/tmp/test.cluster.sqlcipher'
+    , verbose: null
+    , standalone: null
+    , serve: null
+    , connect: null
+  });//.then(testSelect);
+}
+
 if (cluster.isMaster) {
   // not a bad idea to setup the master before forking the workers
   run().then(function () {
@@ -41,7 +75,14 @@ if (cluster.isMaster) {
     }
   });
 } else {
-  run();
+  if (1 === cluster.worker.id) {
+    init().then(testSelect);
+    return;
+  } else {
+    setTimeout(function () {
+      run().then(testSelect);
+    }, 100);
+  }
 }
 
 // The native Promise implementation ignores errors because... dumbness???

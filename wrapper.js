@@ -19,43 +19,73 @@ function create(opts) {
     sqlite3.verbose();
   }
 
-  if (!dbs[opts.filename] || dbs[opts.filename].__key !== opts.key) {
+  if (!dbs[opts.filename]) {
     dbs[opts.filename] = new sqlite3.Database(opts.filename);
   }
 
   db = dbs[opts.filename];
   db.sanitize = sanitize;
   db.escape = sanitize;
-  db.__key = opts.key;
 
-  return new Promise(function (resolve, reject) {
-    db.serialize(function() {
-      var setup = [];
+  db.init = function (newOpts) {
+    if (!newOpts) {
+      newOpts = {};
+    }
 
-      if (opts.key) {
-        // TODO test key length
-        if (!opts.bits) {
-          opts.bits = 128;
+    var key = newOpts.key || opts.key;
+    var bits = newOpts.bits || opts.bits;
+
+    return new Promise(function (resolve, reject) {
+      console.log('OPTS', opts);
+      console.log('BITS', bits);
+      if (db._initialized) {
+        resolve(db);
+        return;
+      }
+
+      if (!key) {
+        if (!bits) {
+          db._initialized = true;
+        }
+        resolve(db);
+        return;
+      }
+
+      // TODO test key length
+
+      db._initialized = true;
+      db.serialize(function () {
+        var setup = [];
+
+        if (!bits) {
+          bits = 128;
         }
 
         // TODO  db.run(sql, function () { resolve() });
         setup.push(new Promise(function (resolve, reject) {
-          db.run("PRAGMA KEY = \"x'" + sanitize(opts.key) + "'\"", [], function (err) {
+          db.run("PRAGMA KEY = \"x'" + sanitize(key) + "'\"", [], function (err) {
             if (err) { reject(err); return; }
             resolve(this);
           });
         }));
         setup.push(new Promise(function (resolve, reject) {
-          db.run("PRAGMA CIPHER = 'aes-" + sanitize(opts.bits) + "-cbc'", [], function (err) {
+          //process.nextTick(function () {
+          db.run("PRAGMA CIPHER = 'aes-" + sanitize(bits) + "-cbc'", [], function (err) {
             if (err) { reject(err); return; }
             resolve(this);
           });
+         //});
         }));
-      }
 
-      Promise.all(setup).then(function () { resolve(db); }, reject);
+        Promise.all(setup).then(function () {
+          // restore original functions
+          resolve(db);
+        }, reject);
+      });
     });
-  });
+  };
+
+  return db.init(opts);
 }
 
 module.exports.sanitize = sanitize;

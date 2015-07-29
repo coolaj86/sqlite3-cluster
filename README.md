@@ -50,7 +50,7 @@ var opts = {
 sqlite.create(opts).then(function (db) {
   // same api as new sqlite3.Database(options.filename)
 
-  client.run("SELECT ?", ['Hello World!'], function (err) {
+  db.run("SELECT ?", ['Hello World!'], function (err) {
     if (err) {
       console.error('[ERROR]', cluster.isMaster && '0' || cluster.worker.id);
       console.error(err);
@@ -74,6 +74,58 @@ process.on('unhandledPromiseRejection', function (err) {
 If you wish to always use clustering, even on a single core system, see `test-cluster.js`.
 
 Likewise, if you wish to use standalone mode in a particular worker process see `test-standalone.js`.
+
+SQLCipher Considerations
+========================
+
+In (hopefully) most cases your AES key won't be available at the time that you want your service
+to start listening. (And if it is you might be using a form of
+"[encraption](https://twitter.com/nmacdona/status/532677876685217795)"
+where you were intending to use a form of "encryption" and should
+look into that before going any further.)
+
+To account for this you can pass the `bits` option on `create` and then call `init({ key: key })`
+when you receive your key from user input, the key server, etc.
+
+Calling any normal methods will result in an error until `init` is called.
+
+**NOTE:** Because the server process (the master) will use `node-sqlite3` directly,
+without any wrapper to protect it, *you* must make sure that it doesn't
+make any calls before the key is supplied with `init`.
+For this reason it is recommended to not use your master process as an http server, etc.
+
+```js
+var cluster = require('cluster');
+var sqlite = require('sqlite3-cluster');
+var numCores = require('os').cpus().length;
+
+var opts = {
+  filename: '/tmp/mydb.sqlcipher'
+
+, key: null
+, bits: 128
+};
+
+sqlite.create(opts).then(function (db) {
+  // same api as new sqlite3.Database(options.filename)
+
+  db.init({
+    bits: 128
+  , key: '00000000000000000000000000000000'
+  }).then(function (db) {
+    db.run("SELECT ?", ['Hello World!'], function (err) {
+      if (err) {
+        console.error('[ERROR]', cluster.isMaster && '0' || cluster.worker.id);
+        console.error(err);
+        return;
+      }
+
+      console.log('[this]', cluster.isMaster && '0' || cluster.worker.id);
+      console.log(this);
+    });
+  });
+});
+```
 
 API
 ===

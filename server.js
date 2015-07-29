@@ -44,15 +44,48 @@ function createApp(server, options) {
 
         switch(cmd.type) {
           case 'init':
+            db[cmd.func].apply(db, cmd.args).then(function () {
+              var args = Array.prototype.slice.call(arguments);
+              var myself;
+
+              if (args[0] === db) {
+                args = [];
+                myself = true;
+              }
+
+              ws.send(JSON.stringify({
+                id: cmd.id
+              , self: myself
+              , args: args
+              //, this: this
+              }));
+            });
             break;
 
           case 'rpc':
+            if (!db._initialized) {
+              ws.send(JSON.stringify({
+                type: 'error'
+              , id: cmd.id
+              , args: [{ message: 'database has not been initialized' }]
+              , error: { message: 'database has not been initialized' }
+              }));
+              return;
+            }
+
             cmd.args.push(function () {
               var args = Array.prototype.slice.call(arguments);
+              var myself;
+
+              if (args[0] === db) {
+                args = [];
+                myself = true;
+              }
 
               ws.send(JSON.stringify({
                 this: this
               , args: args
+              , self: myself
               , id: cmd.id
               }));
             });

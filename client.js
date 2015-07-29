@@ -45,7 +45,9 @@ function getConnection(opts) {
           return startServer(opts).then(function (client) {
             // ws.masterClient = client;
             resolve({ masterClient: client });
-          }, function () {
+          }, function (err) {
+            console.error('[ERROR] failed to connect to sqlite3-cluster service. retrying...');
+            console.error(err);
             retry();
           });
         }
@@ -102,7 +104,55 @@ function create(opts) {
     var proto = sqlite3real.Database.prototype;
     var messages = [];
 
-    function rpc(fname, args) {
+    function init(opts) {
+      return new Promise(function (resolve) {
+        var id = Math.random();
+
+        ws.send(JSON.stringify({
+          type: 'init'
+        , args: [opts]
+        , func: 'init'
+        , filename: opts.filename
+        , id: id
+        }));
+
+        function onMessage(data) {
+          var cmd;
+
+          try {
+            cmd = JSON.parse(data.toString('utf8'));
+          } catch(e) {
+            console.error('[ERROR] in client, from sql server parse json');
+            console.error(e);
+            console.error(data);
+            console.error();
+
+            //ws.send(JSON.stringify({ type: 'error', value: { message: e.message, code: "E_PARSE_JSON" } }));
+            return;
+          }
+
+          if (cmd.id !== id) {
+            return;
+          }
+
+          if (cmd.self) {
+            cmd.args = [db];
+          }
+
+          messages.splice(messages.indexOf(onMessage), 1);
+
+          if ('error' === cmd.type) {
+            reject(cmd.args[0]);
+            return;
+          }
+          resolve(cmd.args[0]);
+        }
+
+        messages.push(onMessage);
+      });
+    }
+
+    function rpcThunk(fname, args) {
       var id;
       var cb;
 
@@ -142,6 +192,9 @@ function create(opts) {
           return;
         }
 
+        if (cmd.self) {
+          cmd.args = [db];
+        }
         cb.apply(cmd.this, cmd.args);
 
         if ('on' !== fname) {
@@ -156,15 +209,18 @@ function create(opts) {
     db.sanitize = require('./wrapper').sanitize;
     db.escape = require('./wrapper').escape;
 
+    // TODO get methods from server (cluster-store does this)
+    // instead of using the prototype
     Object.keys(sqlite3real.Database.prototype).forEach(function (key) {
 
       if ('function' === typeof proto[key]) {
         db[key] = function () {
-          rpc(key, Array.prototype.slice.call(arguments));
+          rpcThunk(key, Array.prototype.slice.call(arguments));
         };
       }
-
     });
+
+    db.init = init;
 
     ws.on('message', function (data) {
       messages.forEach(function (fn) {
