@@ -1,6 +1,12 @@
 'use strict';
 
 /*global Promise*/
+var PromiseA = Promise;
+try {
+  PromiseA = require('bluebird').Promise;
+} catch(e) {
+  console.warn("For better Promise support please use bluebird");
+}
 var sqlite3 = require('sqlite3');
 var dbs = {};
 
@@ -35,7 +41,7 @@ function create(opts) {
     var key = newOpts.key || opts.key;
     var bits = newOpts.bits || opts.bits;
 
-    return new Promise(function (resolve, reject) {
+    return new PromiseA(function (resolve, reject) {
       console.log('OPTS', opts);
       console.log('BITS', bits);
       if (db._initialized) {
@@ -62,13 +68,13 @@ function create(opts) {
         }
 
         // TODO  db.run(sql, function () { resolve() });
-        setup.push(new Promise(function (resolve, reject) {
+        setup.push(new PromiseA(function (resolve, reject) {
           db.run("PRAGMA KEY = \"x'" + sanitize(key) + "'\"", [], function (err) {
             if (err) { reject(err); return; }
             resolve(this);
           });
         }));
-        setup.push(new Promise(function (resolve, reject) {
+        setup.push(new PromiseA(function (resolve, reject) {
           //process.nextTick(function () {
           db.run("PRAGMA CIPHER = 'aes-" + sanitize(bits) + "-cbc'", [], function (err) {
             if (err) { reject(err); return; }
@@ -77,7 +83,7 @@ function create(opts) {
          //});
         }));
 
-        Promise.all(setup).then(function () {
+        PromiseA.all(setup).then(function () {
           // restore original functions
           resolve(db);
         }, reject);

@@ -2,6 +2,12 @@
 
 /*global Promise*/
 
+var PromiseA = Promise;
+try {
+  PromiseA = require('bluebird').Promise;
+} catch(e) {
+  console.warn("For better Promise support please use bluebird");
+}
 // TODO iterate over the prototype
 // translate request / response
 var sqlite3real = require('sqlite3');
@@ -25,7 +31,7 @@ function startServer(opts) {
 }
 
 function getConnection(opts) {
-  return new Promise(function (resolve) {
+  return new PromiseA(function (resolve) {
     //setTimeout(function () {
       var WebSocket = require('ws');
       var ws = new WebSocket('ws+unix:' + opts.sock);
@@ -105,7 +111,7 @@ function create(opts) {
     var messages = [];
 
     function init(opts) {
-      return new Promise(function (resolve) {
+      return new PromiseA(function (resolve, reject) {
         var id = Math.random();
 
         ws.send(JSON.stringify({

@@ -1,12 +1,18 @@
 'use strict';
 /*global Promise*/
 
+var PromiseA = Promise;
+try {
+  PromiseA = require('bluebird').Promise;
+} catch(e) {
+  console.warn("For better Promise support please use bluebird");
+}
 var wsses = {};
 
 function createApp(server, options) {
 
   if (wsses[options.filename]) {
-    return Promise.resolve(wsses[options.filename]);
+    return PromiseA.resolve(wsses[options.filename]);
   }
 
   return require('./wrapper').create(options).then(function (db) {
@@ -119,7 +125,7 @@ function create(options) {
   var fs = require('fs');
   var ps = [];
 
-  ps.push(new Promise(function (resolve) {
+  ps.push(new PromiseA(function (resolve) {
     fs.unlink(options.sock, function () {
       // ignore error when socket doesn't exist
 
@@ -132,7 +138,7 @@ function create(options) {
     return { masterClient: app.masterClient };
   }));
 
-  return Promise.all(ps).then(function (results) {
+  return PromiseA.all(ps).then(function (results) {
     return results[1];
   });
 }
