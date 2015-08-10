@@ -42,8 +42,6 @@ function create(opts) {
     var bits = newOpts.bits || opts.bits;
 
     return new PromiseA(function (resolve, reject) {
-      console.log('OPTS', opts);
-      console.log('BITS', bits);
       if (db._initialized) {
         resolve(db);
         return;
