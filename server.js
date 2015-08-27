@@ -79,7 +79,7 @@ function createApp(server, options) {
               return;
             }
 
-            cmd.args.push(function () {
+            cmd.args.push(function (err) {
               var args = Array.prototype.slice.call(arguments);
               var myself;
 
@@ -89,10 +89,11 @@ function createApp(server, options) {
               }
 
               ws.send(JSON.stringify({
-                this: this
+                this: (!err && this !== global) ? this : {}
               , args: args
               , self: myself
               , id: cmd.id
+              , error: err
               }));
             });
 
