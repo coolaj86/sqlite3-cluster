@@ -1,12 +1,5 @@
 'use strict';
 
-/*global Promise*/
-var PromiseA = Promise;
-try {
-  PromiseA = require('bluebird').Promise;
-} catch(e) {
-  console.warn("For better Promise support please use bluebird");
-}
 var sqlite3 = require('sqlite3');
 var dbs = {};
 
@@ -14,8 +7,12 @@ function sanitize(str) {
   return String(str).replace("'", "''");
 }
 
-function create(opts) {
+function create(opts, verbs) {
+  if (!verbs) {
+    verbs = {};
+  }
   var db;
+  var PromiseA = verbs.Promise || require('bluebird');
 
   if (!opts) {
     opts = {};
@@ -25,11 +22,37 @@ function create(opts) {
     sqlite3.verbose();
   }
 
-  if (!dbs[opts.filename]) {
-    dbs[opts.filename] = new sqlite3.Database(opts.filename);
+  // TODO expire unused dbs from cache
+  var dbname = "";
+  if (opts.dirname) {
+    dbname += opts.dirname;
+  }
+  if (opts.prefix) {
+    dbname += opts.prefix;
+  }
+  if (opts.subtenant) {
+    dbname += opts.subtenant + '.';
+  }
+  if (opts.tenant) {
+    dbname += opts.tenant + '.';
+  }
+  if (opts.dbname) {
+    dbname += opts.dbname;
+  }
+  if (opts.suffix) {
+    dbname += opts.suffix;
+  }
+  if (opts.ext) {
+    dbname += opts.ext;
   }
 
-  db = dbs[opts.filename];
+  if (dbs[dbname]) {
+    return PromiseA.resolve(dbs[dbname]);
+  }
+
+
+  db = new sqlite3.Database(dbname);
+  // dbs[dbname] = db // 
   db.sanitize = sanitize;
   db.escape = sanitize;
 
@@ -43,6 +66,7 @@ function create(opts) {
 
     return new PromiseA(function (resolve, reject) {
       if (db._initialized) {
+        dbs[dbname] = db;
         resolve(db);
         return;
       }
@@ -51,13 +75,13 @@ function create(opts) {
         if (!bits) {
           db._initialized = true;
         }
+        dbs[dbname] = db;
         resolve(db);
         return;
       }
 
       // TODO test key length
 
-      db._initialized = true;
       db.serialize(function () {
         var setup = [];
 
@@ -83,13 +107,16 @@ function create(opts) {
 
         PromiseA.all(setup).then(function () {
           // restore original functions
+          db._initialized = true;
+          dbs[dbname] = db;
           resolve(db);
         }, reject);
       });
     });
   };
 
-  return db.init(opts);
+  dbs[dbname] = db.init(opts);
+  return dbs[dbname];
 }
 
 module.exports.sanitize = sanitize;

@@ -2,16 +2,23 @@
 
 function run() {
   var sqlite3 = require('./standalone');
+  var promise;
 
-  sqlite3.create({
+  promise = sqlite3.create({
       key: '00000000000000000000000000000000'
     , bits: 128
-    , filename: '/tmp/test.cluster.sqlcipher'
+    , dirname: '/tmp/'
+    , prefix: 'foobar.'
+    , dbname: 'standalone'
+    , suffix: '.test'
+    , ext: '.sqlcipher'
     , verbose: null
     , standalone: true
     , serve: null
     , connect: null
-  }).then(function (client) {
+  });
+  
+  promise.then(function (client) {
     client.all("SELECT ?", ['Hello World!'], function (err, result) {
       if (err) {
         console.error('[ERROR] standalone');
@@ -31,7 +38,7 @@ function run() {
 run();
 
 // The native Promise implementation ignores errors because... dumbness???
-process.on('unhandledPromiseRejection', function (err) {
+process.on('unhandledRejection', function (err) {
   console.error('Unhandled Promise Rejection');
   console.error(err);
   console.error(err.stack);

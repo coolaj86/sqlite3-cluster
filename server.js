@@ -1,52 +1,72 @@
 'use strict';
-/*global Promise*/
 
-var PromiseA = Promise;
-try {
-  PromiseA = require('bluebird').Promise;
-} catch(e) {
-  console.warn("For better Promise support please use bluebird");
-}
+var PromiseA = require('bluebird').Promise;
 var wsses = {};
 
-function createApp(server, options) {
-
-  if (wsses[options.filename]) {
-    return PromiseA.resolve(wsses[options.filename]);
+function createApp(servers, options) {
+  if (wsses[options.sock]) {
+    return PromiseA.resolve(wsses[options.sock]);
   }
 
-  return require('./wrapper').create(options).then(function (db) {
 
-    var url = require('url');
-    //var express = require('express');
-    //var app = express();
-    var wss = server.wss;
+  var url = require('url');
+  //var express = require('express');
+  //var app = express();
+  var wss = servers.wss;
+  var server = servers.server;
 
-    function app(req, res) {
-      res.end('NOT IMPLEMENTED');
+  function app(req, res) {
+    res.end('NOT IMPLEMENTED');
+  }
+
+  wss.on('connection', function (ws) {
+    if (!wss.__count) {
+      wss.__count = 0;
+    }
+    wss.__count += 1;
+
+    var location = url.parse(ws.upgradeReq.url, true);
+    // you might use location.query.access_token to authenticate or share sessions
+    // or ws.upgradeReq.headers.cookie (see http://stackoverflow.com/a/16395220/151312
+
+    if (!options.ipcKey) {
+      console.warn("[SECURITY] please include { ipcKey: crypto.randomBytes(16).toString('base64') }"
+        + " in your options and pass it from master to worker processes with worker.send()");
+      ws._authorized = true;
+    } else {
+      ws._authorized = (options.ipcKey === (location.query.ipcKey || location.query.ipc_key));
     }
 
-    wss.on('connection', function (ws) {
+    if (!ws._authorized) {
+      ws.send(JSON.stringify({ error: { message: "Unauthorized: ipc_key does not match", code: 'E_UNAUTHORIZED_IPCKEY' } }));
+      ws.close();
+      return;
+    }
 
-      var location = url.parse(ws.upgradeReq.url, true);
-      // you might use location.query.access_token to authenticate or share sessions
-      // or ws.upgradeReq.headers.cookie (see http://stackoverflow.com/a/16395220/151312
+    ws.on('close', function () {
+      wss.__count -= 1;
+      if (!wss.__count) {
+        wss.close();
+        server.close();
+      }
+    });
+    ws.on('message', function (buffer) {
+      var cmd;
+      var promise;
 
-      ws.__session_id = location.query.session_id || Math.random();
+      try {
+        cmd = JSON.parse(buffer.toString('utf8'));
+      } catch(e) {
+        console.error('[ERROR] parse json');
+        console.error(e);
+        console.error(buffer);
+        console.error();
+        ws.send(JSON.stringify({ type: 'error', value: { message: e.message, code: "E_PARSE_JSON" } }));
+        return;
+      }
 
-      ws.on('message', function (buffer) {
-        var cmd;
-
-        try {
-          cmd = JSON.parse(buffer.toString('utf8'));
-        } catch(e) {
-          console.error('[ERROR] parse json');
-          console.error(e);
-          console.error(buffer);
-          console.error();
-          ws.send(JSON.stringify({ type: 'error', value: { message: e.message, code: "E_PARSE_JSON" } }));
-          return;
-        }
+      // caching and create logic happens in the wrapper stored here below
+      promise = require('./wrapper').create(options, cmd).then(function (db) {
 
         switch(cmd.type) {
           case 'init':
@@ -59,6 +79,7 @@ function createApp(server, options) {
                 myself = true;
               }
 
+              //console.log('[INIT HAPPENING]');
               ws.send(JSON.stringify({
                 id: cmd.id
               , self: myself
@@ -70,6 +91,7 @@ function createApp(server, options) {
 
           case 'rpc':
             if (!db._initialized) {
+              //console.log('[RPC NOT HAPPENING]');
               ws.send(JSON.stringify({
                 type: 'error'
               , id: cmd.id
@@ -88,6 +110,7 @@ function createApp(server, options) {
                 myself = true;
               }
 
+              //console.log('[RPC HAPPENING]', args, cmd.id);
               ws.send(JSON.stringify({
                 this: (!err && this !== global) ? this : {}
               , args: args
@@ -106,15 +129,13 @@ function createApp(server, options) {
         }
 
       });
-
-      ws.send(JSON.stringify({ type: 'session', value: ws.__session_id }));
     });
-
-    app.masterClient = db;
-    wsses[options.filename] = app;
-
-    return app;
   });
+
+  //app.masterClient = db;
+  wsses[options.sock] = app;
+
+  return PromiseA.resolve(app);
 }
 
 function create(options) {
@@ -136,7 +157,7 @@ function create(options) {
 
   ps.push(createApp({ server: server, wss: wss }, options).then(function (app) {
     server.on('request', app);
-    return { masterClient: app.masterClient };
+    return { masterClient: app.masterClient || true };
   }));
 
   return PromiseA.all(ps).then(function (results) {
