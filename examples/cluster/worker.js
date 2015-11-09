@@ -35,7 +35,7 @@ function testSelect(client) {
 }
 
 function init(ipcKey) {
-  var sqlite3 = require('./cluster');
+  var sqlite3 = require('../../cluster');
 
   return sqlite3.create({
       bits: 128
@@ -60,7 +60,7 @@ function init(ipcKey) {
 }
 
 function run(connect, ipcKey) {
-  var sqlite3 = require('./cluster');
+  var sqlite3 = require('../../cluster');
 
   return sqlite3.create({
       bits: 128

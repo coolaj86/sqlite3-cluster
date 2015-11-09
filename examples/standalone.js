@@ -1,7 +1,7 @@
 'use strict';
 
 function run() {
-  var sqlite3 = require('./standalone');
+  var sqlite3 = require('../standalone');
   var promise;
 
   promise = sqlite3.create({

@@ -6,7 +6,7 @@ var numCores = Math.max(minCores, require('os').cpus().length);
 var i;
 
 function run(connect, ipcKey) {
-  var sqlite3 = require('./cluster');
+  var sqlite3 = require('../../cluster');
 
   return sqlite3.create({
     bits: 128
