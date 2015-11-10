@@ -56,7 +56,7 @@ function getConnection(opts, verbs, mySocket) {
 
       ws.on('error', function (err) {
         console.error('[ERROR] ws connection failed, retrying');
-        console.error(err.stack);
+        console.error(err.stack || err);
 
         function retry() {
           // TODO eventually throw up
@@ -72,7 +72,7 @@ function getConnection(opts, verbs, mySocket) {
             resolve({ masterClient: client });
           }, function (err) {
             console.error('[ERROR] failed to connect to sqlite3-cluster service. retrying...');
-            console.error(err);
+            console.error(err.stack || err);
             retry();
           });
         }
@@ -109,6 +109,15 @@ module.exports.createClientFactory = function (conf, verbs, _socket) {
 
       if (_socket && _s) {
         throw new Error("[E_USR_SOCKET] Your parent has decided that you may not choose your own SOCKET. Don't get mad at me, take it up with them.");
+      }
+      if (opts.key && conf.key) {
+        throw new Error("[E_USR_KEY] Your parent has decided that you may not choose your own KEY. Don't get mad at me, take it up with them.");
+      }
+      if (opts.algo && conf.algo) {
+        throw new Error("[E_USR_ALGO] Your parent has decided that you may not choose your own ALGO. Don't get mad at me, take it up with them.");
+      }
+      if (opts.bits && conf.bits) {
+        throw new Error("[E_USR_BITS] Your parent has decided that you may not choose your own BITS. Don't get mad at me, take it up with them.");
       }
       if (opts.dirname && conf.dirname) {
         throw new Error("[E_USR_TENANT] Your parent has decided that you may not choose your own TENANT. Don't get mad at me, take it up with them.");
@@ -173,6 +182,23 @@ module.exports.create = function (opts, verbs, mySocket) {
   }
 
   function create(opts) {
+    function retryServe() {
+      return startServer(opts, verbs).then(function (client) {
+        // ws.masterClient = client;
+        return { masterClient: client };
+      }, function (err) {
+        console.error('[ERROR] retryServe()');
+        console.error(err.stack || err);
+        retryServe();
+      });
+    }
+
+    if (opts.serve) {
+      return retryServe(opts).then(function (servers) {
+        return servers.masterClient;
+      });
+    }
+
     if (!opts.tenant) {
       opts.tenant = "";
     }
@@ -201,37 +227,17 @@ module.exports.create = function (opts, verbs, mySocket) {
       return require('./wrapper').create(opts, verbs);
     }
 
-    function retryServe() {
-      return startServer(opts, verbs).then(function (client) {
-        // ws.masterClient = client;
-        return { masterClient: client };
-      }, function (err) {
-        console.error('[ERROR] retryServe()');
-        console.error(err);
-        retryServe();
-      });
-    }
-
     if (!opts.sock) {
       throw new Error("Please specify opts.sock as the path to the master socket. '/tmp/sqlite3-cluster' would do nicely.");
     }
 
-    if (opts.serve) {
-      promise = retryServe(opts);
-    } else {
-      promise = getConnection(opts, verbs, mySocket).then(function (socket) {
-        mySocket = socket;
-        return mySocket;
-      });
-    }
+    promise = getConnection(opts, verbs, mySocket).then(function (socket) {
+      mySocket = socket;
+      return mySocket;
+    });
 
     // TODO maybe use HTTP POST instead?
     return promise.then(function (ws) {
-      if (ws.masterClient) {
-        // for the server
-        return ws.masterClient;
-      }
-
       var db = {};
       var proto = sqlite3real.Database.prototype;
       var messages = [];
@@ -243,15 +249,26 @@ module.exports.create = function (opts, verbs, mySocket) {
         return idprefix + idcount;
       }
 
-      function init(opts) {
-        return new PromiseA(function (resolve, reject) {
-          // TODO needs to reject by a timeout
+      function init(iopts) {
+        console.log('CLIENT INIT');
+        if (db._initPromise) {
+          return db._initPromise;
+        }
 
+        db._initPromise = new PromiseA(function (resolve, reject) {
+          // TODO needs to reject by a timeout
           var id = genId();
           ws.send(JSON.stringify({
             type: 'init'
-          , args: [opts]
+          , args: [{
+            // encryption
+              bits: opts.bits || iopts.bits
+            , algorithm: opts.algo || opts.algorithm || iopts.algorithm || iopts.algo
+            , algo: opts.algo || opts.algorithm || iopts.algorithm || iopts.algo
+            , encmode: opts.mode || iopts.mode
+            }]
           , func: 'init'
+            // db
           , dirname: opts.dirname
           , prefix: opts.prefix
           , subtenant: opts.subtenant
@@ -259,34 +276,23 @@ module.exports.create = function (opts, verbs, mySocket) {
           , dbname: opts.dbname
           , suffix: opts.suffix
           , ext: opts.ext
+            // session
           , id: id
           }));
 
           function onMessage(data) {
             var cmd;
 
-            if (
-              (data.dbname !== opts.dbname)
-            || (data.dirname !== opts.dirname)
-            || (data.prefix !== opts.prefix)
-            || (data.subtenant !== opts.subtenant)
-            || (data.tenant !== opts.tenant)
-            || (data.suffix !== opts.suffix)
-            || (data.ext !== opts.ext)
-            ) {
-              return reject(new Error("suxors to rejexors"));
-            }
-
             try {
               cmd = JSON.parse(data.toString('utf8'));
             } catch(e) {
               console.error('[ERROR] in client, from sql server parse json');
-              console.error(e);
+              console.error(e.stack || e);
               console.error(data);
               console.error();
 
               // ignore this message, it came out of order
-              return reject(new Error("suxors to rejexors"));
+              return reject(new Error("suxors to rejexors parse"));
             }
 
             if (cmd.id !== id) {
@@ -301,17 +307,21 @@ module.exports.create = function (opts, verbs, mySocket) {
             messages.splice(messages.indexOf(onMessage), 1);
 
             if ('error' === cmd.type) {
+              //console.log('ERROR ARGS');
+              //console.log(cmd);
               reject(cmd.args[0]);
               return;
             }
 
-            //console.log('RESOLVING INIT');
+            console.log('CLIENT RESOLVING INIT');
             resolve(cmd.args[0]);
             return;
           }
 
           messages.push(onMessage);
         });
+
+        return db._initPromise;
       }
 
       function rpcThunk(fname, args) {
@@ -348,7 +358,7 @@ module.exports.create = function (opts, verbs, mySocket) {
             cmd = JSON.parse(data.toString('utf8'));
           } catch(e) {
             console.error('[ERROR] in client, from sql server parse json');
-            console.error(e);
+            console.error(e.stack || e);
             console.error(data);
             console.error();
 
@@ -398,7 +408,7 @@ module.exports.create = function (opts, verbs, mySocket) {
             fn(data);
           } catch(e) {
             console.error("[ERROR] ws.on('message', fn) (multi-callback)");
-            console.error(e);
+            console.error(e.stack || e);
             // ignore
           }
         });

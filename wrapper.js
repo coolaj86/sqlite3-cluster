@@ -1,6 +1,7 @@
 'use strict';
 
 var sqlite3 = require('sqlite3');
+// TODO expire unused dbs from cache
 var dbs = {};
 
 function sanitize(str) {
@@ -11,52 +12,31 @@ function create(opts, verbs) {
   if (!verbs) {
     verbs = {};
   }
-  var db;
-  var PromiseA = verbs.Promise || require('bluebird');
-
   if (!opts) {
     opts = {};
   }
 
-  if (opts.verbose) {
-    sqlite3.verbose();
-  }
-
-  // TODO expire unused dbs from cache
+  var db;
+  var PromiseA = verbs.Promise || require('bluebird');
   var dbname = "";
-  if (opts.dirname) {
-    dbname += opts.dirname;
-  }
-  if (opts.prefix) {
-    dbname += opts.prefix;
-  }
+
+  dbname += (opts.dirname || '');
+  dbname += (opts.prefix || '');
   if (opts.subtenant) {
     dbname += opts.subtenant + '.';
   }
   if (opts.tenant) {
     dbname += opts.tenant + '.';
   }
-  if (opts.dbname) {
-    dbname += opts.dbname;
-  }
-  if (opts.suffix) {
-    dbname += opts.suffix;
-  }
-  if (opts.ext) {
-    dbname += opts.ext;
-  }
+  dbname += (opts.dbname || '');
+  dbname += (opts.suffix || '');
+  dbname += (opts.ext || '');
 
-  if (dbs[dbname]) {
-    return PromiseA.resolve(dbs[dbname]);
-  }
+  function initDb(newOpts) {
+    if (dbs[dbname].initPromise) {
+      return dbs[dbname].initPromise;
+    }
 
-
-  db = new sqlite3.Database(dbname);
-  // dbs[dbname] = db // 
-  db.sanitize = sanitize;
-  db.escape = sanitize;
-
-  db.init = function (newOpts) {
     if (!newOpts) {
       newOpts = {};
     }
@@ -64,18 +44,19 @@ function create(opts, verbs) {
     var key = newOpts.key || opts.key;
     var bits = newOpts.bits || opts.bits;
 
-    return new PromiseA(function (resolve, reject) {
-      if (db._initialized) {
-        dbs[dbname] = db;
+    dbs[dbname].initPromise = new PromiseA(function (resolve, reject) {
+      if (dbs[dbname].db._initialized) {
         resolve(db);
         return;
       }
 
       if (!key) {
         if (!bits) {
-          db._initialized = true;
+          //console.log("INITIALIZED WITHOUT KEY");
+          //console.log(opts);
+          dbs[dbname].db._initialized = true;
         }
-        dbs[dbname] = db;
+        dbs[dbname].db = db;
         resolve(db);
         return;
       }
@@ -107,16 +88,48 @@ function create(opts, verbs) {
 
         PromiseA.all(setup).then(function () {
           // restore original functions
-          db._initialized = true;
-          dbs[dbname] = db;
+          dbs[dbname].db._initialized = true;
+          dbs[dbname].db = db;
+
           resolve(db);
         }, reject);
       });
     });
-  };
 
-  dbs[dbname] = db.init(opts);
-  return dbs[dbname];
+    return dbs[dbname].initPromise;
+  }
+
+  function newDb() {
+    // dbs[dbname] = db // 
+    db = new sqlite3.Database(dbname);
+    db.init = initDb;
+    db.sanitize = sanitize;
+    db.escape = sanitize;
+
+    if (opts.verbose) {
+      sqlite3.verbose();
+    }
+
+    return db;
+  }
+
+  // Could be any of:
+  //   * db object
+  //   * init promise
+
+  if (!dbs[dbname]) {
+    dbs[dbname] = { db: newDb() };
+  }
+
+  if (dbs[dbname].db._initialized) {
+    return PromiseA.resolve(dbs[dbname].db);
+  }
+
+  if (opts.init || ('init' === opts.type) || (opts.bits && opts.key)) {
+    dbs[dbname].initPromise = db.init(opts);
+  }
+
+  return dbs[dbname].initPromise || PromiseA.resolve(dbs[dbname].db);
 }
 
 module.exports.sanitize = sanitize;
