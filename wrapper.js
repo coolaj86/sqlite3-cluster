@@ -20,7 +20,6 @@ function create(opts, verbs) {
   var PromiseA = verbs.Promise || require('bluebird');
   var dbname = "";
 
-  dbname += (opts.dirname || '');
   dbname += (opts.prefix || '');
   if (opts.subtenant) {
     dbname += opts.subtenant + '.';
@@ -31,6 +30,7 @@ function create(opts, verbs) {
   dbname += (opts.dbname || '');
   dbname += (opts.suffix || '');
   dbname += (opts.ext || '');
+  dbname = require('path').resolve(opts.dirname || '', dbname);
 
   function initDb(newOpts) {
     if (dbs[dbname].initPromise) {

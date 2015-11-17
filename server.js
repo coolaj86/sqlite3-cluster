@@ -84,7 +84,7 @@ function createApp(servers, options) {
 
         switch(cmd.type) {
           case 'init':
-            console.log('[S] init', cmd);
+            //console.log('[S] init', cmd);
             db[cmd.func].apply(db, cmd.args).then(function () {
               var args = Array.prototype.slice.call(arguments);
               var myself;

@@ -1,6 +1,6 @@
 {
   "name": "sqlite3-cluster",
-  "version": "1.1.2",
+  "version": "2.0.0",
   "description": "A wrapper to enable the use of sqlite3 with node cluster via a socket server (i.e. for Raspberry Pi 2).",
   "main": "index.js",
   "scripts": {

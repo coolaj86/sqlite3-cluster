@@ -429,6 +429,9 @@ module.exports.create = function (opts, verbs, mySocket) {
         }
       };
 
+      if (opts.init) {
+        return db.init(opts);
+      }
       return db;
     });
   }
