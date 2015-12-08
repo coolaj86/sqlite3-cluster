@@ -19,7 +19,7 @@ function startServer(opts, verbs, myServer) {
 }
 
 // connection is scoped per-process, nothing more
-function getConnection(opts, verbs, mySocket) {
+function getConnection(opts, verbs, mySocket, retry) {
   function incr(ws) {
     if (!ws.__count) {
       ws.__count = 0;
@@ -27,12 +27,12 @@ function getConnection(opts, verbs, mySocket) {
     ws.__count += 1;
     return ws;
   }
-  if (mySocket || processWebSocket) {
+  if (!retry && (mySocket || processWebSocket)) {
     promiseWebSocket = verbs.Promise.resolve(mySocket || processWebSocket);
     return promiseWebSocket.then(incr);
   }
 
-  if (promiseWebSocket) {
+  if (!retry && promiseWebSocket) {
     return promiseWebSocket.then(incr);
   }
 
@@ -45,11 +45,11 @@ function getConnection(opts, verbs, mySocket) {
       var address = require('url').parse('ws+unix:' + opts.sock);
       var ws;
       address.pathname = opts.sock;
-      address.path = '/' + require('cluster').worker.id + '/' + opts.ipcKey;
+      address.path = '/' + (require('cluster').worker||{}).id + '/' + opts.ipcKey;
       address.query = {
         ipcKey: opts.ipcKey
       , ipc_key: opts.ipcKey
-      , worker_id: require('cluster').worker.id
+      , worker_id: (require('cluster').worker||{}).id
       };
       address.path += '?' + require('querystring').stringify(address.query);
       ws = new WebSocket(address);
@@ -61,7 +61,7 @@ function getConnection(opts, verbs, mySocket) {
         function retry() {
           // TODO eventually throw up
           setTimeout(function () {
-            getConnection(opts, verbs, mySocket).then(resolve, retry);
+            getConnection(opts, verbs, mySocket, true).then(resolve, retry);
           }, 100 + (Math.random() * 250));
         }
 
@@ -157,7 +157,7 @@ module.exports.createClientFactory = function (conf, verbs, _socket) {
         verbs.Promise = require('bluebird');
       }
 
-      copy.connect = true;
+      copy.connect = (require('cluster').worker && true);
       copy.sock = conf.sock;
       copy.tenant = conf.tenant;
       copy.ipcKey = conf.ipcKey;
@@ -231,7 +231,7 @@ module.exports.create = function (opts, verbs, mySocket) {
       throw new Error("Please specify opts.sock as the path to the master socket. '/tmp/sqlite3-cluster' would do nicely.");
     }
 
-    promise = getConnection(opts, verbs, mySocket).then(function (socket) {
+    promise = getConnection(opts, verbs, mySocket, true).then(function (socket) {
       mySocket = socket;
       return mySocket;
     });
@@ -250,7 +250,7 @@ module.exports.create = function (opts, verbs, mySocket) {
       }
 
       function init(iopts) {
-        console.log('CLIENT INIT');
+        //console.log('CLIENT INIT');
         if (db._initPromise) {
           return db._initPromise;
         }
@@ -313,7 +313,7 @@ module.exports.create = function (opts, verbs, mySocket) {
               return;
             }
 
-            console.log('CLIENT RESOLVING INIT');
+            //console.log('CLIENT RESOLVING INIT');
             resolve(cmd.args[0]);
             return;
           }
